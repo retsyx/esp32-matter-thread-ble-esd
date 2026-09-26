@@ -8,6 +8,7 @@
 
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
+#include <clusters/occupancy_sensing/integration.h>
 #include <setup_payload/OnboardingCodesUtil.h>
 #include <bsp/esp-bsp.h>
 #include <esp_adc/adc_oneshot.h>
@@ -34,9 +35,9 @@ using namespace esp_matter::attribute;
 using namespace esp_matter::endpoint;
 using namespace chip::app::Clusters;
 
-#define ACC_INTERRUPT_PIN 5
-#define I2C_MASTER_SDA_IO 6
-#define I2C_MASTER_SCL_IO 7
+#define ACC_INTERRUPT_PIN GPIO_NUM_5
+#define I2C_MASTER_SDA_IO GPIO_NUM_6
+#define I2C_MASTER_SCL_IO GPIO_NUM_7
 
 #define I2C_MASTER_FREQ_HZ 100000   /*!< I2C master clock frequency */
 
@@ -182,7 +183,7 @@ static void battery_cb(void *arg)
                                    PowerSource::Attributes::BatPercentRemaining::Id);
         esp_matter_attr_val_t val = esp_matter_invalid(NULL);
         attribute::get_val(attribute, &val);
-        val.val.i = p * 2; // Matter range is 0-200
+        val.val.i32 = p * 2; // Matter range is 0-200
         attribute::update(e.battery_endpoint_id, PowerSource::Id, PowerSource::Attributes::BatPercentRemaining::Id, &val);
 
         attribute = attribute::get(e.battery_endpoint_id,
@@ -288,15 +289,16 @@ static void acc_cb(void *arg, void *data)
     ESP_LOGI(TAG, "Motion detected!");
 
     auto call = [e](bool value) {
-        ESP_LOGI(TAG, "Setting occupancy value: %d", value);
-        attribute_t * attribute = attribute::get(e.sensor_endpoint_id,
-                                                 OccupancySensing::Id,
-                                                 OccupancySensing::Attributes::Occupancy::Id);
+        auto *occupancy = OccupancySensing::FindClusterOnEndpoint(e.sensor_endpoint_id);
+        if (occupancy == nullptr) {
+            ESP_LOGE(TAG, "Occupancy cluster missing on endpoint %u", e.sensor_endpoint_id);
+            return;
+        }
 
-        esp_matter_attr_val_t val = esp_matter_invalid(NULL);
-        attribute::get_val(attribute, &val);
-        val.val.b = value;
-        attribute::update(e.sensor_endpoint_id, OccupancySensing::Id, OccupancySensing::Attributes::Occupancy::Id, &val);
+        // The cluster server owns Occupancy; generic attribute writes are unsupported.
+        occupancy->SetOccupancy(value);
+        ESP_LOGI(TAG, "Occupancy endpoint %u requested: %d actual: %d",
+                 e.sensor_endpoint_id, value, occupancy->IsOccupied());
     };
 
     // schedule the attribute update so that we can report it from matter thread
