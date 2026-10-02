@@ -11,6 +11,8 @@
 #include <clusters/occupancy_sensing/integration.h>
 #include <setup_payload/OnboardingCodesUtil.h>
 #include <bsp/esp-bsp.h>
+#include <esp_adc/adc_cali.h>
+#include <esp_adc/adc_cali_scheme.h>
 #include <esp_adc/adc_oneshot.h>
 #include <esp_err.h>
 #include <esp_log.h>
@@ -120,23 +122,38 @@ static esp_err_t deinit_battery_adc()
 
 static int get_battery_percentage()
 {
-    // See https://docs.espressif.com/projects/esp-idf/en/release-v6.0/esp32/api-reference/peripherals/adc/index.html#adc-attenuation
-    const int vref = 1100;
-    const int k1 = 4; // for 12dB attenuation
-    const int dmax = 4095;
-    int dout;
+    int dout = 0;
+    int mv = 0;
     // init/deinit ADC for every read because there is a bug where ADC reads return bogus data
     // after light sleep otherwise.
     init_battery_adc();
-    esp_err_t err = adc_oneshot_read(adc1_handle, BATTERY_ADC_PIN, &dout);
+
+    const adc_cali_curve_fitting_config_t calibration_config = {
+        .unit_id = ADC_UNIT_1,
+        .chan = BATTERY_ADC_PIN,
+        .atten = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    adc_cali_handle_t calibration_handle = nullptr;
+    esp_err_t err = adc_cali_create_scheme_curve_fitting(&calibration_config, &calibration_handle);
+    if (err != ESP_OK) {
+        deinit_battery_adc();
+        ESP_LOGE(TAG, "Failed to calibrate battery ADC: %s", esp_err_to_name(err));
+        return -1;
+    }
+
+    err = adc_oneshot_read(adc1_handle, BATTERY_ADC_PIN, &dout);
+    if (err == ESP_OK) {
+        err = adc_cali_raw_to_voltage(calibration_handle, dout, &mv);
+    }
+    ESP_ERROR_CHECK(adc_cali_delete_scheme_curve_fitting(calibration_handle));
     deinit_battery_adc();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error %d reading battery ADC", err);
-        return 0;
+        ESP_LOGE(TAG, "Failed to read calibrated battery ADC: %s", esp_err_to_name(err));
+        return -1;
     }
-    int mv = dout * k1 * vref / dmax;
 
-    ESP_LOGI(TAG, "Battery ADC readout %d mV (battery level %d mV)", mv, 2*mv);
+    ESP_LOGI(TAG, "Battery ADC raw %d, calibrated %d mV (battery level %d mV)", dout, mv, 2*mv);
 
     // Max voltage is defined as 4.2V = 4200mV
     // Min voltage is defined as 3.5V = 3500mV
@@ -163,31 +180,40 @@ static void battery_cb(void *arg)
 
     // Read battery level
     int p = get_battery_percentage();
-    bool is_low = false;
-    if (p < 20) {
-        is_low = true;
-    }
+    bool is_low = p < 20;
     auto call = [e, p, is_low]() {
-        ESP_LOGI(TAG, "Setting battery level: %d is_low: %d", p, is_low);
-        // Update battery level and low state
-        attribute_t * attribute = attribute::get(e.battery_endpoint_id,
-                                   PowerSource::Id,
-                                   PowerSource::Attributes::BatPercentRemaining::Id);
-        esp_matter_attr_val_t val = esp_matter_invalid(NULL);
-        attribute::get_val(attribute, &val);
-        val.val.i32 = p * 2; // Matter range is 0-200
-        attribute::update(e.battery_endpoint_id, PowerSource::Id, PowerSource::Attributes::BatPercentRemaining::Id, &val);
+        // Power Source uses the attribute store, unlike the Occupancy cluster server.
+        // Matter represents battery percentage as a nullable uint8 in half-percent units.
+        esp_matter_attr_val_t val = esp_matter_nullable_uint8(nullable<uint8_t>(static_cast<uint8_t>(p * 2)));
+        esp_err_t err = attribute::update(e.battery_endpoint_id, PowerSource::Id,
+                                         PowerSource::Attributes::BatPercentRemaining::Id, &val);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Battery percentage update failed on endpoint %u: %s",
+                     e.battery_endpoint_id, esp_err_to_name(err));
+            return;
+        }
 
-        attribute = attribute::get(e.battery_endpoint_id,
-                                   PowerSource::Id,
-                                   PowerSource::Attributes::BatReplacementNeeded::Id);
-        attribute::get_val(attribute, &val);
-        val.val.b = is_low;
-        attribute::update(e.battery_endpoint_id, PowerSource::Id, PowerSource::Attributes::BatReplacementNeeded::Id, &val);
+        val = esp_matter_bool(is_low);
+        err = attribute::update(e.battery_endpoint_id, PowerSource::Id,
+                                PowerSource::Attributes::BatReplacementNeeded::Id, &val);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Battery replacement update failed on endpoint %u: %s",
+                     e.battery_endpoint_id, esp_err_to_name(err));
+            return;
+        }
+        ESP_LOGI(TAG, "Battery endpoint %u updated: %d%% replacement_needed=%d",
+                 e.battery_endpoint_id, p, is_low);
     };
 
     // schedule the attribute update so that we can report it from matter thread
-    chip::DeviceLayer::SystemLayer().ScheduleLambda([call] { call(); });
+    if (p >= 0) {
+        CHIP_ERROR err = chip::DeviceLayer::SystemLayer().ScheduleLambda([call] { call(); });
+        if (err != CHIP_NO_ERROR) {
+            ESP_LOGE(TAG, "Failed to schedule battery update: %" CHIP_ERROR_FORMAT, err.Format());
+        }
+    } else {
+        ESP_LOGW(TAG, "Battery sample unavailable; keeping the previous reported value");
+    }
 
     // Restart the timer
     uint64_t period_us = 24ULL * 3600ULL * 1000000ULL;
@@ -459,7 +485,9 @@ extern "C" void app_main()
     endpoint_t *power_source_ep = power_source::create(root, &power_source_config, ENDPOINT_FLAG_NONE, NULL);
     ABORT_APP_ON_FAILURE(power_source_ep != nullptr, ESP_LOGE(TAG, "Failed to create power_source endpoint"));
     esp_matter::cluster_t *cluster = esp_matter::cluster::get(power_source_ep, chip::app::Clusters::PowerSource::Id);
-    cluster::power_source::attribute::create_bat_percent_remaining(cluster, 200, 0, 200);
+    attribute_t *battery_percentage = cluster::power_source::attribute::create_bat_percent_remaining(
+        cluster, nullable<uint8_t>(), 0, 200);
+    ABORT_APP_ON_FAILURE(battery_percentage != nullptr, ESP_LOGE(TAG, "Failed to create battery percentage attribute"));
 
     endpoint_data.battery_endpoint_id = endpoint::get_id(power_source_ep);
 
