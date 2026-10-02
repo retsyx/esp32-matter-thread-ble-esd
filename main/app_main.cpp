@@ -86,14 +86,6 @@ static esp_err_t deinit_i2c(i2c_port_t port = I2C_NUM_0) {
     return i2c_driver_delete(port);
 }
 
-static esp_err_t factory_reset_button_register()
-{
-    button_handle_t push_button;
-    esp_err_t err = bsp_iot_button_create(&push_button, NULL, BSP_BUTTON_NUM);
-    VerifyOrReturnError(err == ESP_OK, err);
-    return app_reset_button_register(push_button);
-}
-
 #define BATTERY_ADC_PIN ADC_CHANNEL_1
 
 static adc_oneshot_unit_handle_t adc1_handle;
@@ -198,7 +190,7 @@ static void battery_cb(void *arg)
     chip::DeviceLayer::SystemLayer().ScheduleLambda([call] { call(); });
 
     // Restart the timer
-    uint64_t period_us = 24UL * 3600UL * 1000000UL;
+    uint64_t period_us = 24ULL * 3600ULL * 1000000ULL;
     esp_err_t err = esp_timer_start_once(battery_timer_handle, period_us);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start timer, err: %d", err);
@@ -367,10 +359,10 @@ static void enable_sleep()
 {
     esp_pm_config_t pm_config = {
         .max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
-        .min_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
+        .min_freq_mhz = 40,
         .light_sleep_enable = true
     };
-    esp_pm_configure(&pm_config);
+    ESP_ERROR_CHECK(esp_pm_configure(&pm_config));
 }
 
 static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
@@ -443,10 +435,6 @@ extern "C" void app_main()
 
     /* Initialize the ESP NVS layer */
     nvs_flash_init();
-
-    /* Initialize push button on the dev-kit to reset the device */
-    err = factory_reset_button_register();
-    ABORT_APP_ON_FAILURE(ESP_OK == err, ESP_LOGE(TAG, "Failed to initialize reset button, err: %d", err));
 
     /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */
     node::config_t root_config;
