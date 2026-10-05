@@ -1,0 +1,8 @@
+References,Quantity,Value or description,Footprint,Manufacturer,Manufacturer part number,Tolerance,Voltage rating,Dielectric,Power rating,Datasheet URL,Assembly,Notes
+U1,1,XIAO ESP32-C6,Board:XIAO_ESP32C6_SMD,Seeed Studio,113991254,,,,,https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32C6/XIAO_ESP32_C6_v1.0_SCH_260114.pdf,SMD reflow,
+U2,1,BMA400,Board:LGA-12_2x2mm_P0.5mm,Bosch Sensortec,BMA400,,,,,https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bma400-ds000.pdf,SMD reflow,
+J1,1,JST PH 2.0mm horizontal 2-pin battery connector,Board:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal,JST,S2B-PH-K-S(LF)(SN),,,,,https://www.jst-mfg.com/product/pdf/eng/ePH.pdf,Through-hole,
+"R1,R2",2,10k,Board:R_0603_1608Metric,Panasonic Industry,ERJ-3EKF1002V,1%,,,0.1W,https://industrial.panasonic.com/cdbs/www-data/pdf/RDA0000/AOA0000C304.pdf,SMD 0603,"10kohm, 1%, 0.1W, 0603 (1608 metric)"
+"R3,R4",2,200k,Board:R_0603_1608Metric,Panasonic Industry,ERJ-3EKF2003V,1%,,,0.1W,https://industrial.panasonic.com/cdbs/www-data/pdf/RDA0000/AOA0000C304.pdf,SMD 0603,"200kohm, 1%, 0.1W, 0603 (1608 metric)"
+"C1,C2,C4",3,100nF,Board:C_0603_1608Metric,KEMET,C0603C104K5RACTU,10%,50V,X7R,,https://yageogroup.com/content/datasheet/asset/file/KEM_C1002_X7R_SMD,SMD 0603,"100nF, 50V, X7R, 10%, 0603 (1608 metric)"
+C3,1,1uF,Board:C_0603_1608Metric,KEMET,C0603C105K4RACTU,10%,16V,X7R,,https://yageogroup.com/content/datasheet/asset/file/KEM_C1002_X7R_SMD,SMD 0603,"1uF, 16V, X7R, 10%, 0603 (1608 metric)"

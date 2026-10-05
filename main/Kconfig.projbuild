@@ -1,5 +1,16 @@
 menu "Example Configuration"
 
+    config BOARD_XIAO_ESP32C6
+        bool "Use the XIAO ESP32-C6 carrier board"
+        depends on IDF_TARGET_ESP32C6
+        default n
+        help
+            Select the carrier in hw/board: BMA400 SDA on GPIO22 (D4),
+            SCL on GPIO23 (D5), and INT1 on GPIO2 (D2). Battery voltage
+            is measured through a 1:1 divider on GPIO1 (D1 / ADC1 CH1).
+            Also enables the XIAO onboard antenna using GPIO3 and GPIO14.
+            Leave disabled for the original SparkFun Qwiic Pocket wiring.
+
     config SHTC3_I2C_SDA_PIN
         int "I2C SDA Pin"
         default 4

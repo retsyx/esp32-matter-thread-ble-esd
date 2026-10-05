@@ -23,10 +23,12 @@
 #include <esp_timer.h>
 #include <esp_vfs_eventfd.h>
 #include <nvs_flash.h>
+#include <driver/gpio.h>
 #include <driver/i2c.h>
 #include <app_openthread_config.h>
 #include <app_reset.h>
 #include <common_macros.h>
+#include <sdkconfig.h>
 
 #include <button_gpio.h>
 
@@ -37,9 +39,15 @@ using namespace esp_matter::attribute;
 using namespace esp_matter::endpoint;
 using namespace chip::app::Clusters;
 
+#ifdef CONFIG_BOARD_XIAO_ESP32C6
+#define ACC_INTERRUPT_PIN GPIO_NUM_2  // XIAO D2; supports light-sleep wakeup.
+#define I2C_MASTER_SDA_IO GPIO_NUM_22  // XIAO D4
+#define I2C_MASTER_SCL_IO GPIO_NUM_23  // XIAO D5
+#else
 #define ACC_INTERRUPT_PIN GPIO_NUM_5
 #define I2C_MASTER_SDA_IO GPIO_NUM_6
 #define I2C_MASTER_SCL_IO GPIO_NUM_7
+#endif
 
 #define I2C_MASTER_FREQ_HZ 100000   /*!< I2C master clock frequency */
 
@@ -88,6 +96,7 @@ static esp_err_t deinit_i2c(i2c_port_t port = I2C_NUM_0) {
     return i2c_driver_delete(port);
 }
 
+// Both boards connect a 1:1 battery divider to GPIO1 (XIAO D1).
 #define BATTERY_ADC_PIN ADC_CHANNEL_1
 
 static adc_oneshot_unit_handle_t adc1_handle;
@@ -458,6 +467,17 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16
 extern "C" void app_main()
 {
     esp_err_t err;
+
+#ifdef CONFIG_BOARD_XIAO_ESP32C6
+    // Power the XIAO RF switch and select its onboard antenna for BLE/Thread.
+    ESP_ERROR_CHECK(gpio_set_level(GPIO_NUM_3, 0));
+    ESP_ERROR_CHECK(gpio_set_level(GPIO_NUM_14, 0));
+    ESP_ERROR_CHECK(gpio_set_direction(GPIO_NUM_3, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(GPIO_NUM_14, GPIO_MODE_OUTPUT));
+    // Keep the antenna controls stable when light sleep powers down peripherals.
+    ESP_ERROR_CHECK(gpio_hold_en(GPIO_NUM_3));
+    ESP_ERROR_CHECK(gpio_hold_en(GPIO_NUM_14));
+#endif
 
     /* Initialize the ESP NVS layer */
     nvs_flash_init();

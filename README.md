@@ -12,10 +12,18 @@ This setup seems to average 650µA at 4V from the battery when idling. Detected 
 * Bosch BMA400 accelerometer. The [SparkFun BMA400 Qwicc board](https://www.sparkfun.com/products/21207) interfaces easily with the SparkFun Qwiic Pocket.
 * LiPo Battery. If using the linked SparkFun board, use a battery with a JST PH 2.0mm connector. Ensure that the polarity of the battery leads match the polarity of the board connector. The SparkFun Qwicc Pocket's connector polarity is the opposite of most hobby LiPos sold. Battery connector pins can be easily pried out with a utility knife to reverse their position in the connector.
 
+### Custom Board
+
+Alternatively, an untested custom PCB based on the XIAO ESP32-C6 and the BMA400 accelerometer is [available](hw/board).
+
+The LiPo Battery JST PH 2.0mm connector polarity for this board matches the typically available LiPo polarity.
+
 ## Building
 
 * Install [esp-idf](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/index.html) and [esp-matter](https://docs.espressif.com/projects/esp-matter/en/latest/esp32/)
-* Set the target. For example, esp32-c6 if using the recommended board.
+* Set the target.
+    * For the Sparkfun board use esp32-c6.
+    * For the custom board, enable **Example Configuration → Use the XIAO ESP32-C6 carrier board** in (`idf.py menuconfig` (`CONFIG_BOARD_XIAO_ESP32C6=y`).
 * Build the project, and flash to device
 
 ## Commissioning
