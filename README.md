@@ -2,6 +2,10 @@
 
 Implements a motion sensor with an ESP32 and a BMA400 IMU - be notified when the mailman delivers your mail by attaching an accelerometer to the mailbox lid. This code puts together all the bits that seem to be required for a Matter over Thread End Sleepy Device (ESD) with BLE commissioning.
 
+## Power Consumption
+
+This setup seems to average 650µA at 4V from the battery when idling. Detected motion spikes power consumption considerably. The ESP32-C6's idle power draw is very high and not practical for long lived, battery powered, Matter devices.
+
 ## Requirements
 
 * An Espressif ESP32 device with a Thread and BLE radio (for example, the ESP32-C6). If using a battery, the device should ideally have a charging circuit to allow charging the LiPo that will power the device. [The SparkFun Qwiic Pocket Development Board](https://www.sparkfun.com/products/22925) has an onboard charger, and is easy to interface with a suitable accelerometer.
