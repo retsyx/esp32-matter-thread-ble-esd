@@ -14,7 +14,7 @@ This setup seems to average 650µA at 4V from the battery when idling. Detected 
 
 ### Custom Board
 
-Alternatively, an untested custom PCB based on the XIAO ESP32-C6 and the BMA400 accelerometer is [available](hw/board).
+Alternatively, an untested custom PCB design based on the XIAO ESP32-C6 and the BMA400 accelerometer is [available](hw/board).
 
 The LiPo Battery JST PH 2.0mm connector polarity for this board matches the typically available LiPo polarity.
 
