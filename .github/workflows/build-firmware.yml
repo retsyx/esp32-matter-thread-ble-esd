@@ -2,8 +2,15 @@ name: Build firmware
 
 on:
   push:
+    branches:
+      - '**'
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    outputs:
+      artifact-id:
+        description: ID of the uploaded firmware artifact
+        value: ${{ jobs.build.outputs.artifact-id }}
 
 permissions:
   contents: read
@@ -12,6 +19,8 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    outputs:
+      artifact-id: ${{ steps.upload-firmware.outputs.artifact-id }}
     defaults:
       run:
         shell: bash
@@ -72,6 +81,7 @@ jobs:
           idf.py build
 
       - name: Upload firmware
+        id: upload-firmware
         uses: actions/upload-artifact@v7
         with:
           name: esp32-matter-thread-ble-esd-firmware.zip

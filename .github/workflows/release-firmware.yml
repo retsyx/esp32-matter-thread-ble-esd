@@ -1,0 +1,49 @@
+name: Release firmware
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.event.created && !github.event.deleted
+    uses: ./.github/workflows/build-firmware.yml
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+
+    steps:
+      - name: Download firmware
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          merge-multiple: true
+          path: firmware
+
+      - name: Package firmware
+        run: |
+          cd firmware
+          zip -r "$RUNNER_TEMP/esp32-matter-thread-ble-esd-firmware.zip" .
+
+      - name: Create GitHub release
+        run: |
+          gh release create "$RELEASE_TAG" \
+            "$RUNNER_TEMP/esp32-matter-thread-ble-esd-firmware.zip" \
+            --verify-tag \
+            --title "$RELEASE_TAG" \
+            --generate-notes
