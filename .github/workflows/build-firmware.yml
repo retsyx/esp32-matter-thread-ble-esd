@@ -1,0 +1,87 @@
+name: Build firmware
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      IDF_TARGET: esp32c6
+      # Match the SDK revisions used by the project's ESP-IDF 6.1 setup.
+      ESP_IDF_COMMIT: fff9895c82d744c7237be8847347bdd1b07c6643
+      ESP_MATTER_COMMIT: 59574f3fb62fddc690b4127fd3a4a43cfce4245e
+
+    steps:
+      - name: Check out firmware
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set SDK paths
+        run: |
+          echo "IDF_PATH=$RUNNER_TEMP/esp-idf" >> "$GITHUB_ENV"
+          echo "ESP_MATTER_PATH=$RUNNER_TEMP/esp-matter" >> "$GITHUB_ENV"
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            git wget flex bison gperf python3 python3-pip python3-venv \
+            python3-dev cmake ninja-build ccache libffi-dev libssl-dev \
+            dfu-util libusb-1.0-0 gcc g++ pkg-config curl libdbus-1-dev \
+            libglib2.0-dev libavahi-client-dev unzip libgirepository1.0-dev \
+            libcairo2-dev libreadline-dev libevent-dev default-jre
+
+      - name: Set up ESP-IDF
+        run: |
+          git init "$IDF_PATH"
+          git -C "$IDF_PATH" remote add origin https://github.com/espressif/esp-idf.git
+          git -C "$IDF_PATH" fetch --depth 1 origin "$ESP_IDF_COMMIT"
+          git -C "$IDF_PATH" checkout --detach FETCH_HEAD
+          git -C "$IDF_PATH" submodule update --init --recursive --depth 1
+          "$IDF_PATH/install.sh" "$IDF_TARGET"
+
+      - name: Set up ESP-Matter
+        run: |
+          source "$IDF_PATH/export.sh"
+          git init "$ESP_MATTER_PATH"
+          git -C "$ESP_MATTER_PATH" remote add origin https://github.com/espressif/esp-matter.git
+          git -C "$ESP_MATTER_PATH" fetch --depth 1 origin "$ESP_MATTER_COMMIT"
+          git -C "$ESP_MATTER_PATH" checkout --detach FETCH_HEAD
+          git -C "$ESP_MATTER_PATH" submodule update --init --depth 1
+          cd "$ESP_MATTER_PATH/connectedhomeip/connectedhomeip"
+          ./scripts/checkout_submodules.py --platform esp32 linux --shallow
+          cd "$ESP_MATTER_PATH"
+          ./install.sh --no-host-tool
+
+      - name: Build firmware
+        run: |
+          source "$IDF_PATH/export.sh"
+          source "$ESP_MATTER_PATH/export.sh"
+          # Build with the checked-in sdkconfig; set-target would reset it.
+          idf.py build
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v7
+        with:
+          name: esp32-matter-thread-ble-esd-firmware.zip
+          if-no-files-found: error
+          path: |
+            build/*.bin
+            build/*.elf
+            build/*.map
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+            build/flasher_args.json
+            build/flash_args
+            sdkconfig
